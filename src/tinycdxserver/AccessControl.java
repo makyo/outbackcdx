@@ -25,7 +25,7 @@ import static tinycdxserver.Json.GSON;
 class AccessControl {
     private final Map<Long,AccessPolicy> policies;
     private final Map<Long,AccessRule> rules;
-    private final RulesBySurt rulesBySurt;
+    private final RulesBySsurt rulesBySurt;
     private final RocksDB db;
     private final ColumnFamilyHandle ruleCf, policyCf;
     private final AtomicLong nextRuleId, nextPolicyId;
@@ -38,7 +38,7 @@ class AccessControl {
         rules = loadRules(db, ruleCf);
         policies = loadPolicies(db, policyCf);
 
-        rulesBySurt = new RulesBySurt(rules.values());
+        rulesBySurt = new RulesBySsurt(rules.values());
 
         nextRuleId = new AtomicLong(calculateNextId(db, ruleCf));
         nextPolicyId = new AtomicLong(calculateNextId(db, policyCf));
@@ -125,7 +125,7 @@ class AccessControl {
             generatedId = policy.id = nextPolicyId.getAndIncrement();
         }
         byte[] value = GSON.toJson(policy).getBytes(UTF_8);
-        db.put(ruleCf, encodeKey(policy.id), value);
+        db.put(policyCf, encodeKey(policy.id), value);
         policies.put(policy.id, policy);
         return generatedId;
     }
@@ -136,7 +136,7 @@ class AccessControl {
      */
     private AccessRule ruleForCapture(Capture capture, Date accessTime) {
         AccessRule matching = null;
-        for (AccessRule rule : rulesForSurt(capture.urlkey)) {
+        for (AccessRule rule : rulesForSsurt(SSURT.fromUrl(capture.original))) {
             if (rule.matchesDates(capture.date(), accessTime)) {
                 matching = rule;
             }
@@ -147,7 +147,7 @@ class AccessControl {
     /**
      * Find all rules that may apply to the given SURT.
      */
-    public List<AccessRule> rulesForSurt(String surt) {
+    public List<AccessRule> rulesForSsurt(String surt) {
         return rulesBySurt.prefixing(surt);
     }
 
@@ -208,10 +208,10 @@ class AccessControl {
      * As the radix tree library can't handle an empty ley we prefix every key
      * by "(" to allow for a default rule.
      */
-    static class RulesBySurt {
+    static class RulesBySsurt {
         private final InvertedRadixTree<List<AccessRule>> tree;
 
-        RulesBySurt(Collection<AccessRule> rules) {
+        RulesBySsurt(Collection<AccessRule> rules) {
             tree = new ConcurrentInvertedRadixTree<>(new DefaultCharArrayNodeFactory());
             for (AccessRule rule: rules) {
                 put(rule);
@@ -223,25 +223,25 @@ class AccessControl {
          * once for each SURT prefix.
          */
         void put(AccessRule rule) {
-            for (String surt: rule.surts) {
-                List<AccessRule> list = tree.getValueForExactKey("(" + surt);
+            rule.ssurtPrefixes().forEach(ssurtPrefix -> {
+                List<AccessRule> list = tree.getValueForExactKey(ssurtPrefix);
                 if (list == null) {
                     list = Collections.synchronizedList(new ArrayList<>());
-                    tree.put("(" + surt, list);
+                    tree.put(ssurtPrefix, list);
                 }
                 list.add(rule);
-            }
+            });
         }
 
         void remove(AccessRule rule) {
-            for (String surt : rule.surts) {
-                List<AccessRule> list = tree.getValueForExactKey("(" + surt);
+            rule.ssurtPrefixes().forEach(ssurtPrefix -> {
+                List<AccessRule> list = tree.getValueForExactKey(ssurtPrefix);
                 list.remove(rule);
-            }
+            });
         }
 
-        List<AccessRule> prefixing(String surt) {
-            return flatten(tree.getValuesForKeysPrefixing("(" + surt));
+        List<AccessRule> prefixing(String ssurt) {
+            return flatten(tree.getValuesForKeysPrefixing(ssurt + " "));
         }
 
         static List<AccessRule> flatten(Iterable<List<AccessRule>> listsOfRules) {
