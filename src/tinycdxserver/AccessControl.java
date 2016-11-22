@@ -3,6 +3,8 @@ package tinycdxserver;
 import com.googlecode.concurrenttrees.radix.node.concrete.DefaultCharArrayNodeFactory;
 import com.googlecode.concurrenttrees.radixinverted.ConcurrentInvertedRadixTree;
 import com.googlecode.concurrenttrees.radixinverted.InvertedRadixTree;
+import org.netpreserve.ssurt.Canonicalizer;
+import org.netpreserve.ssurt.ParsedUrl;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
@@ -154,7 +156,9 @@ class AccessControl {
                 if (Objects.equals(previousUrl, capture.original)) {
                     rules = previousRules;
                 } else {
-                    String ssurt = SSURT.fromUrl(capture.original);
+                    ParsedUrl url = ParsedUrl.parse(capture.original);
+                    Canonicalizer.WHATWG.canonicalize(url);
+                    String ssurt = url.ssurt().toString();
                     previousUrl = capture.original;
                     previousRules = rules = rulesForSsurt(ssurt);
                 }

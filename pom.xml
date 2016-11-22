@@ -125,10 +125,11 @@
             <artifactId>concurrent-trees</artifactId>
             <version>2.4.0</version>
         </dependency>
+
         <dependency>
-            <groupId>io.mola.galimatias</groupId>
-            <artifactId>galimatias</artifactId>
-            <version>0.2.0</version>
+            <groupId>org.netpreserve</groupId>
+            <artifactId>ssurt</artifactId>
+            <version>0.1-SNAPSHOT</version>
         </dependency>
 
         <!--
